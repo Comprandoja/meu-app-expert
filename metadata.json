@@ -1,0 +1,7 @@
+{
+  "name": "Escola Express - Aviso de Chegada",
+  "description": "Um aplicativo para responsáveis notificarem a escola sobre a chegada para retirada de alunos, com suporte a geofencing inteligente.",
+  "requestFramePermissions": [
+    "geolocation"
+  ]
+}

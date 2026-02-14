@@ -1,0 +1,1 @@
+// Este arquivo foi removido para usar apenas o index.tsx como ponto de entrada.
