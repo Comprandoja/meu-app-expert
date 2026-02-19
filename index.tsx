@@ -4,206 +4,215 @@ import { createRoot } from 'react-dom/client';
 import { GoogleGenAI } from "@google/genai";
 
 // ========================================================================
-// 🎯 ÁREA DE PERSONALIZAÇÃO
+// 🎯 CONFIGURAÇÃO DA MARCA (ESCOLA EXPRESS)
 // ========================================================================
-const MEU_PROJETO = {
-  NOME: "Escola Express",             
-  SUBTITULO: "NÍVEL ESPECIALISTA V3.5",    
-  PROMPT_ORIGINAL: "Você é o Mentor AI da Escola Express. Responda de forma profissional e ajude o usuário em suas tarefas.",
-  MENSAGEM_BOAS_VINDAS: "Sistemas Escola Express ativos. Sou seu Mentor AI. Como posso acelerar seu projeto hoje?",
-  SUGESTOES: [
-    "Como escalar meu negócio digital?",
-    "Ideias de automação com IA",
-    "Dicas de marketing para iniciantes",
-    "Como melhorar meu código React?"
+const BRAND = {
+  NAME: "Escola Express",
+  VERSION: "NÍVEL ESPECIALISTA V3.5",
+  PRIMARY_COLOR: "#6366f1", // Indigo 500
+  WELCOME: "Sistemas Escola Express ativos. Sou seu Mentor AI especializado em escala e automação. Como posso acelerar seu projeto hoje?",
+  SYSTEM_PROMPT: "Você é o Mentor AI da Escola Express. Sua personalidade é: Profissional, estrategista, focado em resultados rápidos e escala digital. Use linguagem clara e motivadora.",
+  SUGGESTIONS: [
+    "Plano de escala para infoprodutos",
+    "Melhores ferramentas de automação 2024",
+    "Como estruturar um funil de vendas High Ticket",
+    "Análise estratégica de copy"
   ]
 };
 
+// Componentes de Ícones
 const IconZap = () => (
-  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
 );
 const IconSend = () => (
-  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
 );
-const IconTrash = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+const IconShield = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
 );
 
-const App = function() {
-  const [chatInput, setChatInput] = useState('');
-  const [chatHistory, setChatHistory] = useState([]);
-  const [isTyping, setIsTyping] = useState(false);
-  const chatEndRef = useRef(null);
+const App = () => {
+  const [input, setInput] = useState('');
+  const [messages, setMessages] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
 
-  useEffect(function() {
-    const saved = localStorage.getItem('expert_chat_history_v3');
+  // Carregar histórico
+  useEffect(() => {
+    const saved = localStorage.getItem('ee_history_v3');
     if (saved) {
-      setChatHistory(JSON.parse(saved));
+      setMessages(JSON.parse(saved));
     } else {
-      setChatHistory([{ role: 'ai', text: MEU_PROJETO.MENSAGEM_BOAS_VINDAS }]);
+      setMessages([{ role: 'ai', text: BRAND.WELCOME }]);
     }
   }, []);
 
-  useEffect(function() {
-    if (chatHistory.length > 0) {
-      localStorage.setItem('expert_chat_history_v3', JSON.stringify(chatHistory));
+  // Scroll automático
+  useEffect(() => {
+    scrollRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (messages.length > 0) {
+      localStorage.setItem('ee_history_v3', JSON.stringify(messages));
     }
-    if (chatEndRef.current) {
-      chatEndRef.current.scrollIntoView({ behavior: "smooth" });
-    }
-  }, [chatHistory, isTyping]);
+  }, [messages, loading]);
 
-  const clearHistory = () => {
-    if (window.confirm("Deseja limpar toda a conversa?")) {
-      const initial = [{ role: 'ai', text: MEU_PROJETO.MENSAGEM_BOAS_VINDAS }];
-      setChatHistory(initial);
-      localStorage.setItem('expert_chat_history_v3', JSON.stringify(initial));
-    }
-  };
+  const handleSend = async (textOverride?: string) => {
+    const content = textOverride || input;
+    if (!content.trim() || loading) return;
 
-  const handleSendMessage = async function(customMsg?: string) {
-    const text = customMsg || chatInput;
-    if (!text.trim() || isTyping) return;
-
-    // Log para depuração no console do navegador (F12)
-    console.log("Tentando enviar mensagem...");
-    
-    setChatInput('');
-    setChatHistory(prev => [...prev, { role: 'user', text: text }]);
-    setIsTyping(true);
+    setInput('');
+    setMessages(prev => [...prev, { role: 'user', text: content }]);
+    setLoading(true);
 
     try {
-      // 1. Verificar se a chave existe antes de chamar
-      const apiKey = process.env.API_KEY;
-      if (!apiKey || apiKey === 'undefined' || apiKey.length < 5) {
-        throw new Error("CHAVE_NAO_CONFIGURADA");
+      // O segredo do Vercel: Garantir que a instância pegue a chave do process.env no momento exato
+      const key = process.env.API_KEY;
+      
+      if (!key || key === 'undefined') {
+        throw new Error("SISTEMA_OFFLINE_NO_VERCEL");
       }
 
-      const ai = new GoogleGenAI({ apiKey: apiKey });
-      
-      // Usando gemini-3-flash-preview conforme diretrizes
-      const result = await ai.models.generateContentStream({
-        model: 'gemini-3-flash-preview',
-        contents: text,
-        config: { 
-          systemInstruction: MEU_PROJETO.PROMPT_ORIGINAL,
-          temperature: 0.7
-        }
-      });
-      
-      let fullText = "";
-      setChatHistory(prev => [...prev, { role: 'ai', text: '' }]);
+      const ai = new GoogleGenAI({ apiKey: key });
+      const model = 'gemini-3-flash-preview';
 
-      for await (const chunk of result) {
-        fullText += chunk.text;
-        setChatHistory(prev => {
-          const newHistory = [...prev];
-          newHistory[newHistory.length - 1] = { role: 'ai', text: fullText };
-          return newHistory;
+      const response = await ai.models.generateContentStream({
+        model: model,
+        contents: content,
+        config: { 
+          systemInstruction: BRAND.SYSTEM_PROMPT,
+          temperature: 0.8
+        },
+      });
+
+      let fullResponse = "";
+      setMessages(prev => [...prev, { role: 'ai', text: '' }]);
+
+      for await (const chunk of response) {
+        fullResponse += chunk.text;
+        setMessages(prev => {
+          const updated = [...prev];
+          updated[updated.length - 1] = { role: 'ai', text: fullResponse };
+          return updated;
         });
       }
-    } catch (error: any) {
-      console.error("ERRO DETALHADO:", error);
+    } catch (err: any) {
+      console.error("Erro Escola Express:", err);
+      let errorMsg = "⚠️ Falha na conexão neural.";
       
-      let mensagemErro = "⚠️ Ocorreu um erro inesperado.";
-      
-      if (error.message === "CHAVE_NAO_CONFIGURADA") {
-        mensagemErro = "❌ Chave API não detectada. Vá no Vercel > Settings > Environment Variables, adicione API_KEY e depois faça um REDEPLOY na aba Deployments.";
-      } else if (error.message?.includes("API key not valid")) {
-        mensagemErro = "❌ Sua chave API do Google é inválida. Verifique se copiou corretamente do Google AI Studio.";
-      } else if (error.message?.includes("User location is not supported")) {
-        mensagemErro = "❌ O Google Gemini ainda não suporta sua região ou o Vercel está em um servidor não suportado.";
-      } else {
-        mensagemErro = `⚠️ Erro técnico: ${error.message || "Erro de conexão"}. Tente fazer um 'Redeploy' no Vercel.`;
+      if (err.message === "SISTEMA_OFFLINE_NO_VERCEL") {
+        errorMsg = "❌ ERRO DE CONFIGURAÇÃO: O site foi publicado antes de você adicionar a API_KEY. \n\nSOLUÇÃO: Vá no painel do Vercel > Deployments > Clique em 'Redeploy' para ativar sua chave.";
+      } else if (err.message.includes("API key not valid")) {
+        errorMsg = "❌ CHAVE INVÁLIDA: A chave API configurada no Vercel não é aceita pelo Google. Verifique se copiou a chave correta no AI Studio.";
       }
-
-      setChatHistory(prev => [...prev, { role: 'ai', text: mensagemErro }]);
+      
+      setMessages(prev => [...prev, { role: 'ai', text: errorMsg }]);
     } finally {
-      setIsTyping(false);
+      setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-[#020617] text-slate-200 font-sans selection:bg-indigo-500/30 overflow-hidden">
-      <header className="border-b border-white/5 bg-slate-950/60 backdrop-blur-xl sticky top-0 z-50 px-6 py-5">
-        <div className="max-w-6xl mx-auto flex justify-between items-center">
-          <div className="flex items-center gap-4">
-            <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-indigo-600/20">
+    <div className="flex h-screen bg-[#030712] text-slate-200 font-sans">
+      {/* Sidebar - Desktop Only */}
+      <aside className="hidden lg:flex w-80 bg-slate-900/50 border-r border-white/5 flex-col p-6 backdrop-blur-2xl">
+        <div className="flex items-center gap-3 mb-12">
+          <div className="p-2 bg-indigo-600 rounded-lg shadow-lg shadow-indigo-500/20">
+            <IconZap />
+          </div>
+          <div>
+            <h1 className="font-black italic text-xl tracking-tighter text-white uppercase">{BRAND.NAME}</h1>
+            <p className="text-[10px] font-bold text-indigo-400 tracking-widest">{BRAND.VERSION}</p>
+          </div>
+        </div>
+
+        <div className="space-y-4">
+          <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest px-2">Sugestões de Escala</p>
+          {BRAND.SUGGESTIONS.map((s, i) => (
+            <button 
+              key={i}
+              onClick={() => handleSend(s)}
+              className="w-full text-left p-4 rounded-xl bg-white/5 border border-white/5 hover:border-indigo-500/50 hover:bg-white/10 transition-all text-sm font-medium group"
+            >
+              <span className="text-slate-400 group-hover:text-white transition-colors">{s}</span>
+            </button>
+          ))}
+        </div>
+
+        <div className="mt-auto p-4 bg-indigo-600/10 border border-indigo-500/20 rounded-2xl">
+          <div className="flex items-center gap-2 text-indigo-400 mb-2">
+            <IconShield />
+            <span className="text-xs font-bold uppercase">Status de Conexão</span>
+          </div>
+          <p className="text-[11px] text-slate-400 leading-relaxed">
+            Sistemas criptografados e integrados via Google GenAI Engine.
+          </p>
+        </div>
+      </aside>
+
+      {/* Main Chat Area */}
+      <main className="flex-1 flex flex-col relative overflow-hidden">
+        {/* Header Mobile */}
+        <header className="lg:hidden p-4 border-b border-white/5 flex items-center justify-between bg-slate-950/80 backdrop-blur-md">
+          <div className="flex items-center gap-2">
+            <div className="p-1.5 bg-indigo-600 rounded flex items-center justify-center text-white scale-75">
               <IconZap />
             </div>
-            <div>
-              <h1 className="text-lg font-black uppercase italic text-white leading-none tracking-tighter">{MEU_PROJETO.NOME}</h1>
-              <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mt-1">{MEU_PROJETO.SUBTITULO}</p>
-            </div>
+            <span className="font-black italic text-sm text-white uppercase tracking-tighter">{BRAND.NAME}</span>
           </div>
-          <button onClick={clearHistory} className="text-slate-500 hover:text-red-400 transition-all flex items-center gap-2 bg-white/5 px-4 py-2 rounded-full border border-white/5 text-[10px] font-bold uppercase">
-            <IconTrash /> Limpar Chat
-          </button>
-        </div>
-      </header>
+        </header>
 
-      <main className="max-w-6xl mx-auto p-6 grid grid-cols-1 lg:grid-cols-12 gap-10 h-[calc(100vh-90px)]">
-        <div className="lg:col-span-5 flex flex-col justify-center space-y-10 py-10">
-          <div className="space-y-6">
-            <h2 className="text-7xl font-black text-white uppercase italic leading-[0.8] tracking-tighter">
-              A IA QUE <br/> 
-              <span className="text-indigo-500 italic">CONSTRÓI.</span>
-            </h2>
-            <p className="text-slate-400 text-lg leading-relaxed font-medium">
-              Sua estrutura está pronta. Se o erro persistir, faça o <b>Redeploy</b> no painel do Vercel.
-            </p>
-          </div>
-          
-          <div className="flex flex-wrap gap-2">
-            {MEU_PROJETO.SUGESTOES.map((s, i) => (
-              <button 
-                key={i} 
-                onClick={() => handleSendMessage(s)}
-                className="text-[10px] font-bold uppercase tracking-wider bg-white/5 border border-white/10 px-4 py-3 rounded-full hover:bg-indigo-600 hover:text-white transition-all"
-              >
-                {s}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div className="lg:col-span-7 flex flex-col min-h-0 py-4">
-          <div className="bg-slate-900/40 border border-white/10 rounded-[2.5rem] flex-1 flex flex-col overflow-hidden shadow-2xl backdrop-blur-sm">
-            <div className="flex-1 overflow-y-auto p-8 space-y-8 scrollbar-hide">
-              {chatHistory.map((msg, i) => (
-                <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                  <div className={`p-6 rounded-[2rem] text-[15px] leading-relaxed max-w-[85%] ${
-                    msg.role === 'user' 
-                      ? 'bg-indigo-600 text-white rounded-tr-none' 
-                      : 'bg-slate-800/80 text-slate-100 border border-white/5 rounded-tl-none whitespace-pre-wrap'
-                  }`}>
-                    {msg.text || "..."}
-                  </div>
+        {/* Messages */}
+        <div className="flex-1 overflow-y-auto px-4 py-8 lg:p-12 space-y-10">
+          <div className="max-w-3xl mx-auto space-y-10">
+            {messages.map((m, i) => (
+              <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'} animate-in fade-in slide-in-from-bottom-4 duration-500`}>
+                <div className={`relative max-w-[90%] lg:max-w-[80%] p-6 rounded-[2rem] text-sm lg:text-[15px] leading-relaxed shadow-2xl ${
+                  m.role === 'user' 
+                    ? 'bg-indigo-600 text-white rounded-tr-none' 
+                    : 'bg-slate-800/50 border border-white/5 text-slate-100 rounded-tl-none backdrop-blur-sm'
+                }`}>
+                  <span className="whitespace-pre-wrap">{m.text}</span>
+                  {m.role === 'ai' && i === messages.length - 1 && loading && (
+                    <div className="mt-4 flex gap-1">
+                      <div className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-bounce delay-75" />
+                      <div className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-bounce delay-150" />
+                      <div className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-bounce delay-300" />
+                    </div>
+                  )}
                 </div>
-              ))}
-              <div ref={chatEndRef} />
-            </div>
-
-            <div className="p-6 bg-slate-950/40 border-t border-white/10">
-              <div className="relative flex items-center bg-slate-900 border border-white/10 rounded-2xl p-1">
-                <input 
-                  type="text" 
-                  value={chatInput}
-                  disabled={isTyping}
-                  onChange={(e) => setChatInput(e.target.value)}
-                  onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
-                  className="flex-1 bg-transparent px-5 py-4 text-sm text-white focus:outline-none"
-                  placeholder="Envie um comando..."
-                />
-                <button 
-                  onClick={() => handleSendMessage()}
-                  disabled={isTyping || !chatInput.trim()}
-                  className="w-12 h-12 bg-indigo-600 rounded-xl flex items-center justify-center text-white transition-all disabled:opacity-20"
-                >
-                  {isTyping ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <IconSend />}
-                </button>
               </div>
+            ))}
+            <div ref={scrollRef} />
+          </div>
+        </div>
+
+        {/* Input Area */}
+        <div className="p-4 lg:p-10 bg-gradient-to-t from-[#030712] via-[#030712]/90 to-transparent">
+          <div className="max-w-3xl mx-auto relative group">
+            <div className="absolute -inset-1 bg-gradient-to-r from-indigo-600 to-purple-600 rounded-2xl blur opacity-20 group-focus-within:opacity-40 transition duration-1000"></div>
+            <div className="relative flex items-center bg-slate-900 border border-white/10 rounded-2xl p-2 shadow-2xl">
+              <input 
+                type="text"
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyPress={(e) => e.key === 'Enter' && handleSend()}
+                placeholder="Qual o próximo nível, Mentor?"
+                className="flex-1 bg-transparent border-none focus:ring-0 px-4 py-3 text-white placeholder:text-slate-600 font-medium"
+              />
+              <button 
+                onClick={() => handleSend()}
+                disabled={loading || !input.trim()}
+                className="w-12 h-12 bg-indigo-600 rounded-xl flex items-center justify-center text-white hover:bg-indigo-500 transition-all shadow-lg shadow-indigo-600/20 disabled:opacity-30 disabled:grayscale active:scale-90"
+              >
+                {loading ? (
+                  <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                ) : (
+                  <IconSend />
+                )}
+              </button>
             </div>
+            <p className="text-[9px] text-center text-slate-600 uppercase tracking-[0.4em] font-black mt-6">
+              Escola Express Digital Architecture • Secured Intelligence
+            </p>
           </div>
         </div>
       </main>
