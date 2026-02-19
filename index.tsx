@@ -3,175 +3,168 @@ import React, { useState, useEffect, useRef } from 'react';
 import { createRoot } from 'react-dom/client';
 import { GoogleGenAI } from "@google/genai";
 
-// Definições de Marca
+// ==========================================
+// CONFIGURAÇÕES DA MARCA ESCOLA EXPRESS
+// ==========================================
 const BRAND = {
   NAME: "Escola Express",
-  VERSION: "NÍVEL ESPECIALISTA V3.5",
-  WELCOME: "Sistemas Escola Express ativos. Sou seu Mentor AI. Como posso acelerar seu projeto hoje?",
-  SYSTEM_PROMPT: "Você é o Mentor AI da Escola Express. Responda de forma profissional e estratégica.",
-  SUGGESTIONS: [
-    "Plano de escala para infoprodutos",
-    "Melhores ferramentas de automação",
-    "Estratégia de funil High Ticket"
-  ]
+  TAGLINE: "MENTORIA AI • NÍVEL ESPECIALISTA",
+  PRIMARY: "#6366f1", // Indigo
+  ACCENT: "#f59e0b",  // Amber
+  WELCOME: "Conexão estabelecida. Sou o Mentor AI da Escola Express. Como posso impulsionar seu negócio digital hoje?",
+  SYSTEM_PROMPT: "Você é o Mentor da Escola Express. Seu objetivo é ajudar empreendedores digitais a escalar seus negócios com automação e estratégia. Seja direto, prático e motivador."
 };
 
-const IconZap = () => (
-  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-);
-const IconSend = () => (
-  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
-);
-const IconKey = () => (
-  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3m-3-3l-2.5-2.5"/></svg>
-);
-
 const App = () => {
-  const [input, setInput] = useState('');
   const [messages, setMessages] = useState([]);
+  const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
-  const [hasKey, setHasKey] = useState(true);
+  const [systemStatus, setSystemStatus] = useState('checking'); // checking, ready, error
   const scrollRef = useRef<HTMLDivElement>(null);
 
+  // Inicialização e Verificação de Segurança
   useEffect(() => {
-    // Verificar se a chave está disponível no ambiente
     const key = process.env.API_KEY;
-    if (!key || key === 'undefined') {
-      setHasKey(false);
-    }
     
-    const saved = localStorage.getItem('ee_chat_v3');
-    if (saved) setMessages(JSON.parse(saved));
-    else setMessages([{ role: 'ai', text: BRAND.WELCOME }]);
+    // Pequeno atraso para o check visual de "carregando sistema"
+    setTimeout(() => {
+      if (key && key !== 'undefined' && key.length > 10) {
+        setSystemStatus('ready');
+      } else {
+        setSystemStatus('error');
+      }
+    }, 1000);
+
+    const saved = localStorage.getItem('ee_messages_v4');
+    if (saved) {
+      setMessages(JSON.parse(saved));
+    } else {
+      setMessages([{ role: 'ai', text: BRAND.WELCOME }]);
+    }
   }, []);
 
+  // Scroll automático para a última mensagem
   useEffect(() => {
     scrollRef.current?.scrollIntoView({ behavior: 'smooth' });
-    if (messages.length > 0) localStorage.setItem('ee_chat_v3', JSON.stringify(messages));
-  }, [messages, loading]);
-
-  const handleOpenKey = async () => {
-    try {
-      // @ts-ignore
-      await window.aistudio.openSelectKey();
-      setHasKey(true);
-      // Recarregar a página ou apenas prosseguir
-      window.location.reload();
-    } catch (e) {
-      alert("Erro ao selecionar a chave. Verifique se você está logado no Google.");
+    if (messages.length > 1) {
+      localStorage.setItem('ee_messages_v4', JSON.stringify(messages));
     }
-  };
+  }, [messages]);
 
-  const handleSend = async (textOverride?: string) => {
-    const content = textOverride || input;
-    if (!content.trim() || loading) return;
+  const handleSend = async (customText?: string) => {
+    const text = customText || input;
+    if (!text.trim() || loading) return;
 
-    // Verificar chave novamente antes de enviar
-    // @ts-ignore
-    const isKeySelected = await window.aistudio.hasSelectedApiKey();
-    if (!process.env.API_KEY && !isKeySelected) {
+    const currentKey = process.env.API_KEY;
+    if (!currentKey || currentKey === 'undefined') {
       setMessages(prev => [...prev, { 
         role: 'ai', 
-        text: "❌ CHAVE NÃO ATIVA: O Vercel bloqueou o acesso automático por segurança. Clique no botão 'ATIVAR MENTOR' abaixo para liberar o acesso." 
+        text: "❌ SISTEMA DESCONECTADO: A chave API_KEY não foi detectada pelo Vercel. \n\nPASSO A PASSO PARA CORRIGIR:\n1. Vá no painel do Vercel.\n2. Em 'Settings' > 'Environment Variables', crie a chave API_KEY.\n3. Vá em 'Deployments' e faça um NOVO Redeploy." 
       }]);
-      setHasKey(false);
       return;
     }
 
     setInput('');
-    setMessages(prev => [...prev, { role: 'user', text: content }]);
+    setMessages(prev => [...prev, { role: 'user', text }]);
     setLoading(true);
 
     try {
-      // Criar nova instância sempre para garantir que pegue a chave mais atual
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+      const genAI = new GoogleGenAI({ apiKey: currentKey });
       const model = 'gemini-3-flash-preview';
 
-      const response = await ai.models.generateContentStream({
+      const result = await genAI.models.generateContentStream({
         model: model,
-        contents: content,
-        config: { systemInstruction: BRAND.SYSTEM_PROMPT },
+        contents: text,
+        config: { systemInstruction: BRAND.SYSTEM_PROMPT }
       });
 
-      let fullResponse = "";
+      let responseText = "";
       setMessages(prev => [...prev, { role: 'ai', text: '' }]);
 
-      for await (const chunk of response) {
-        fullResponse += chunk.text;
+      for await (const chunk of result) {
+        responseText += chunk.text;
         setMessages(prev => {
-          const updated = [...prev];
-          updated[updated.length - 1] = { role: 'ai', text: fullResponse };
-          return updated;
+          const newMessages = [...prev];
+          newMessages[newMessages.length - 1] = { role: 'ai', text: responseText };
+          return newMessages;
         });
       }
     } catch (err: any) {
-      let errorMsg = `⚠️ Erro de Conexão: ${err.message}`;
-      if (err.message.includes("not found")) {
-        setHasKey(false);
-        errorMsg = "❌ Chave expirada ou não encontrada. Por favor, reconecte clicando em 'ATIVAR MENTOR'.";
-      }
-      setMessages(prev => [...prev, { role: 'ai', text: errorMsg }]);
+      console.error(err);
+      setMessages(prev => [...prev, { 
+        role: 'ai', 
+        text: "⚠️ Ocorreu um erro na rede neural. Verifique se sua chave do Google AI Studio está ativa e com créditos/limites disponíveis." 
+      }]);
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="flex h-screen bg-[#030712] text-slate-200 font-sans overflow-hidden">
-      {/* Sidebar */}
-      <aside className="hidden lg:flex w-72 bg-slate-900/40 border-r border-white/5 flex-col p-6">
-        <div className="flex items-center gap-3 mb-10">
-          <div className="p-2 bg-indigo-600 rounded-lg shadow-indigo-500/20 shadow-lg"><IconZap /></div>
+    <div className="flex h-screen bg-[#020617] text-slate-100 font-sans">
+      {/* Sidebar Desktop */}
+      <aside className="hidden lg:flex w-80 bg-slate-900/40 border-r border-white/5 flex-col p-8 backdrop-blur-xl">
+        <div className="flex items-center gap-4 mb-12">
+          <div className="w-12 h-12 bg-indigo-600 rounded-2xl flex items-center justify-center shadow-lg shadow-indigo-500/20">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+          </div>
           <div>
-            <h1 className="font-black italic text-lg text-white uppercase leading-none">{BRAND.NAME}</h1>
-            <p className="text-[9px] font-bold text-indigo-400 tracking-widest mt-1">{BRAND.VERSION}</p>
+            <h1 className="font-black italic text-xl tracking-tighter leading-none">{BRAND.NAME}</h1>
+            <p className="text-[10px] font-bold text-indigo-400 tracking-widest mt-1 uppercase">{BRAND.TAGLINE}</p>
           </div>
         </div>
 
-        {!hasKey && (
-          <button 
-            onClick={handleOpenKey}
-            className="w-full mb-8 flex items-center justify-center gap-2 py-4 bg-amber-500/10 border border-amber-500/50 text-amber-500 rounded-xl font-bold text-xs uppercase tracking-widest hover:bg-amber-500 hover:text-white transition-all animate-pulse"
-          >
-            <IconKey /> Ativar Mentor
-          </button>
-        )}
-
-        <div className="space-y-4">
-          <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Atalhos de Escala</p>
-          {BRAND.SUGGESTIONS.map((s, i) => (
-            <button key={i} onClick={() => handleSend(s)} className="w-full text-left p-4 rounded-xl bg-white/5 border border-white/5 hover:border-indigo-500/50 hover:bg-white/10 transition-all text-xs font-medium text-slate-400 hover:text-white">
-              {s}
+        <div className="space-y-4 mb-auto">
+          <p className="text-[10px] font-bold text-slate-500 uppercase tracking-[0.2em] px-2">Sugestões de Escala</p>
+          {["Criar Funil de Vendas", "Otimizar Anúncios", "Copywriting para Infoprodutos"].map((item, idx) => (
+            <button 
+              key={idx}
+              onClick={() => handleSend(item)}
+              className="w-full text-left p-4 rounded-xl bg-white/5 border border-white/5 hover:border-indigo-500/50 hover:bg-white/10 transition-all text-sm group"
+            >
+              <span className="text-slate-400 group-hover:text-white transition-colors">{item}</span>
             </button>
           ))}
         </div>
 
-        <div className="mt-auto p-4 bg-slate-800/50 rounded-2xl border border-white/5">
-          <p className="text-[10px] text-slate-500 leading-relaxed uppercase font-bold text-center">
-            Escola Express • 2024<br/>Elite Digital AI
-          </p>
+        <div className="p-5 bg-indigo-950/30 border border-indigo-500/20 rounded-2xl">
+          <div className="flex items-center gap-2 mb-2">
+            <div className={`w-2 h-2 rounded-full ${systemStatus === 'ready' ? 'bg-green-500 shadow-[0_0_10px_rgba(34,197,94,0.5)]' : 'bg-red-500 animate-pulse'}`}></div>
+            <span className="text-[10px] font-black uppercase tracking-wider text-indigo-300">
+              {systemStatus === 'checking' ? 'Checando Sistemas...' : systemStatus === 'ready' ? 'Mentor Online' : 'Sistema Offline'}
+            </span>
+          </div>
+          <p className="text-[10px] text-slate-400 leading-relaxed">Proteção Escola Express: Dados criptografados ponta-a-ponta.</p>
         </div>
       </aside>
 
-      {/* Main */}
-      <main className="flex-1 flex flex-col bg-gradient-to-br from-transparent to-indigo-900/10">
-        <header className="lg:hidden p-4 border-b border-white/5 bg-slate-950/80 backdrop-blur-md flex items-center justify-between">
-          <span className="font-black italic text-white uppercase tracking-tighter">{BRAND.NAME}</span>
-          {!hasKey && (
-            <button onClick={handleOpenKey} className="px-3 py-1.5 bg-amber-500 rounded-lg text-[10px] font-black text-white uppercase">Ativar</button>
-          )}
+      {/* Main Chat Area */}
+      <main className="flex-1 flex flex-col relative overflow-hidden">
+        {/* Header Mobile */}
+        <header className="lg:hidden p-4 border-b border-white/5 bg-slate-950/50 backdrop-blur-md flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="p-1.5 bg-indigo-600 rounded text-white scale-90"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg></div>
+            <span className="font-black italic text-white uppercase tracking-tighter text-sm">{BRAND.NAME}</span>
+          </div>
         </header>
 
-        <div className="flex-1 overflow-y-auto px-4 py-8 lg:p-12">
+        {/* Messages Container */}
+        <div className="flex-1 overflow-y-auto px-4 py-8 lg:p-12 scrollbar-hide">
           <div className="max-w-3xl mx-auto space-y-8">
             {messages.map((m, i) => (
-              <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                <div className={`p-6 rounded-[2rem] text-sm leading-relaxed max-w-[85%] shadow-xl ${
-                  m.role === 'user' ? 'bg-indigo-600 text-white rounded-tr-none' : 'bg-slate-800/80 border border-white/5 text-slate-100 rounded-tl-none backdrop-blur-md'
+              <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'} animate-in fade-in slide-in-from-bottom-2 duration-500`}>
+                <div className={`relative max-w-[90%] lg:max-w-[80%] p-6 rounded-3xl text-sm lg:text-[15px] leading-relaxed shadow-xl ${
+                  m.role === 'user' 
+                    ? 'bg-indigo-600 text-white rounded-tr-none' 
+                    : 'bg-slate-800/60 border border-white/5 text-slate-100 rounded-tl-none backdrop-blur-sm'
                 }`}>
                   <span className="whitespace-pre-wrap">{m.text}</span>
-                  {m.text.includes("ATIVAR MENTOR") && (
-                    <button onClick={handleOpenKey} className="mt-4 block w-full py-3 bg-amber-500 text-white font-black rounded-xl uppercase text-xs tracking-widest shadow-lg">Clique aqui para Ativar</button>
+                  {m.role === 'ai' && i === messages.length - 1 && loading && (
+                    <div className="mt-4 flex gap-1.5 opacity-50">
+                      <div className="w-1 h-1 bg-white rounded-full animate-bounce" />
+                      <div className="w-1 h-1 bg-white rounded-full animate-bounce [animation-delay:0.2s]" />
+                      <div className="w-1 h-1 bg-white rounded-full animate-bounce [animation-delay:0.4s]" />
+                    </div>
                   )}
                 </div>
               </div>
@@ -180,28 +173,35 @@ const App = () => {
           </div>
         </div>
 
+        {/* Input Dock */}
         <div className="p-4 lg:p-10">
           <div className="max-w-3xl mx-auto relative group">
-            <div className="absolute -inset-1 bg-indigo-500 rounded-2xl blur opacity-10 group-focus-within:opacity-30 transition"></div>
-            <div className="relative flex items-center bg-slate-900 border border-white/10 rounded-2xl p-1.5 shadow-2xl">
+            <div className="absolute -inset-1 bg-gradient-to-r from-indigo-500 to-purple-500 rounded-2xl blur opacity-10 group-focus-within:opacity-25 transition-all duration-500"></div>
+            <div className="relative flex items-center bg-slate-900/80 border border-white/10 rounded-2xl p-2 shadow-2xl backdrop-blur-lg">
               <input 
-                type="text" 
-                value={input} 
-                onChange={(e) => setInput(e.target.value)} 
+                type="text"
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
                 onKeyPress={(e) => e.key === 'Enter' && handleSend()}
                 placeholder="Qual o próximo nível, Mentor?"
-                className="flex-1 bg-transparent px-5 py-4 text-sm text-white focus:outline-none font-medium"
+                className="flex-1 bg-transparent border-none focus:ring-0 px-4 py-4 text-sm text-white placeholder:text-slate-600 font-medium"
               />
               <button 
-                onClick={() => handleSend()} 
+                onClick={() => handleSend()}
                 disabled={loading || !input.trim()}
-                className="w-12 h-12 bg-indigo-600 rounded-xl flex items-center justify-center text-white transition-all disabled:opacity-20 active:scale-95"
+                className="w-12 h-12 bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-800 rounded-xl flex items-center justify-center text-white transition-all shadow-lg active:scale-95 group"
               >
-                {loading ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <IconSend />}
+                {loading ? (
+                  <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                ) : (
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                )}
               </button>
             </div>
-            <div className="flex justify-center mt-6 gap-4">
-               <a href="https://ai.google.dev/gemini-api/docs/billing" target="_blank" className="text-[9px] text-slate-600 uppercase tracking-widest font-bold hover:text-indigo-400">Documentação de Faturamento</a>
+            <div className="flex justify-between items-center mt-6 px-2 opacity-30">
+               <span className="text-[8px] uppercase tracking-[0.3em] font-black">Escola Express Digital Architecture</span>
+               <div className="h-[1px] flex-1 mx-4 bg-slate-800"></div>
+               <span className="text-[8px] uppercase tracking-[0.3em] font-black">Secure Core V4</span>
             </div>
           </div>
         </div>
